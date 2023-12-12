@@ -1,0 +1,157 @@
+hydra:
+    run:
+        dir: /home/artermiloff/PycharmProjects/PyTorch-DeepFloorplan/experiment_logs/v4/${general.name}/train_${now:%Y%m%d_%H%M%S}
+
+general:
+    name: exp02.1_FIXED_BASE
+    device: cuda
+    seed: 9
+    epochs: 100
+    num_workers: 6
+    boundary_channels: 5
+    room_channels: 7
+    shuffle_type: standard # standard random none
+    train_batch_size: 1
+    #  val_batch_size: 1
+    model_ckpt:
+
+model:
+    _target_: net.DFPmodel
+    boundary_channels: ${general.boundary_channels}
+    room_channels: ${general.room_channels}
+    interpolation_size: 512
+    pretrained: True
+    freeze: True
+
+optimizer:
+    optimizer_type: torch.optim.Adam
+    params:
+        betas: [0.5, 0.999]
+        lr: 1e-4
+
+scheduler:
+#  scheduler_type: torch.optim.lr_scheduler.OneCycleLR
+#  batch_wise_step: True
+#  params:
+#    #    gamma: 0.95
+#    max_lr: 3e-4
+#    anneal_strategy: 'linear'
+#    pct_start: 0.166667
+#    div_factor: 10
+
+loss:
+    room_w: 1
+    boundary_w: 1
+
+dataset:
+    remap_boundary: { "utility": 0, "openingtohall": 4, "openingtoroom": 4 }
+    remap_room:
+        {
+            "closet": 5,
+            "bathroom": 2,
+            "hall": 1,
+            "balcony": 4,
+            "room": 6,
+            "utility": 3,
+            "openingtohall": 0,
+            "openingtoroom": 0,
+        }
+    # train_share: 0.95
+    split_seed: 3
+    train:
+        _target_: data.r3dDataset
+        root_dir: /home/artermiloff/PycharmProjects/PyTorch-DeepFloorplan/dataset/FPR_433_v2/train
+        name:
+        fill_type: center
+        crop_type: full
+        remap_boundary: ${dataset.remap_boundary}
+        remap_room: ${dataset.remap_room}
+        num_boundary: ${general.boundary_channels}
+        num_room: ${general.room_channels}
+        transform:
+            _target_: albumentations.Compose
+            transforms:
+                #        - _target_: albumentations.OneOf
+                #          p: 0.5
+                #          transforms:
+                #          - _target_: albumentations.CropAndPad
+                #            percent: [0.01, 0.3]
+                #            pad_mode: 0
+                #            pad_cval: [[ 255, 255, 255 ]]
+                #            pad_cval_mask: 0
+                #            sample_independently: False
+                #        - _target_: albumentations.ToGray
+                #          p: 1
+                - _target_: albumentations.Resize
+                  height: 512
+                  width: 512
+                  interpolation: 0 # cv2.INTER_NEAREST
+    #        - _target_: albumentations.RandomRotate90
+    #          p: 0.5
+    #        - _target_: albumentations.VerticalFlip
+    #          p: 0.5
+    #        - _target_: albumentations.HorizontalFlip
+    #          p: 0.5
+    #        - _target_: albumentations.ColorJitter
+    #          p: 0.5
+    #          brightness: 0.5
+    #          contrast: 0.5
+    #          hue: 0.5
+    #          saturation: 0.5
+    #        - _target_: albumentations.JpegCompression
+    #          p: 0.5
+    #          quality_lower: 3
+    #          quality_upper: 10
+    #        - _target_: albumentations.Rotate
+    #          p: 0.5
+    #          limit: 60
+    #          interpolation: 0 # cv2.INTER_NEAREST
+    #          border_mode: 0 # cv2.BORDER_CONSTANT
+    #          value: [ 255, 255, 255 ]
+    #          mask_value: 0
+    val:
+        - _target_: data.r3dDataset
+          root_dir: /home/artermiloff/PycharmProjects/PyTorch-DeepFloorplan/dataset/FPR_433_v2/val_standard
+          name: standard
+          remap_boundary: ${dataset.remap_boundary}
+          remap_room: ${dataset.remap_room}
+          num_boundary: ${general.boundary_channels}
+          num_room: ${general.room_channels}
+          fill_type: center
+          crop_type: full
+          transform:
+              _target_: albumentations.Compose
+              transforms:
+                  #          - _target_: albumentations.ToGray
+                  #            p: 1
+                  - _target_: albumentations.Resize
+                    height: 512
+                    width: 512
+                    interpolation: 0 # cv2.INTER_NEAREST
+        - _target_: data.r3dDataset
+          root_dir: /home/artermiloff/PycharmProjects/PyTorch-DeepFloorplan/dataset/FPR_433_v2/val_rare
+          name: rare
+          remap_boundary: ${dataset.remap_boundary}
+          remap_room: ${dataset.remap_room}
+          num_boundary: ${general.boundary_channels}
+          num_room: ${general.room_channels}
+          fill_type: center
+          crop_type: full
+          transform:
+              _target_: albumentations.Compose
+              transforms:
+                  #          - _target_: albumentations.ToGray
+                  #            p: 1
+                  - _target_: albumentations.Resize
+                    height: 512
+                    width: 512
+                    interpolation: 0 # cv2.INTER_NEAREST
+
+logging:
+    save_every_n_epochs: 5
+    log_train_every_n_epochs: 25
+    log_val_every_n_epochs: 1
+#predict:
+#  src_dir: /home/artermiloff/PycharmProjects/PyTorch-DeepFloorplan/dataset/FPR/val
+#  dst_dir: pred_results/${general.name}
+#  weights_path:
