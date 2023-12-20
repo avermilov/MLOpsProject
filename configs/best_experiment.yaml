@@ -1,6 +1,6 @@
 hydra:
     run:
-        dir: /home/artermiloff/PycharmProjects/PyTorch-DeepFloorplanRussia/experiment_logs/v4/${general.name}/train_${now:%Y%m%d_%H%M%S}
+        dir: experiment_logs/${general.name}/train_${now:%Y%m%d_%H%M%S}
 
 general:
     name: BEST_EXPERIMENT
@@ -54,8 +54,8 @@ dataset:
         openingtoroom: 0
     split_seed: 3
     train:
-        _target_: data.r3dDataset
-        root_dir: /home/artermiloff/Datasets/FloorPlansRussia/FPR_433_v2/train
+        _target_: data.FloorPlanDataset
+        root_dir: data/FloorPlansRussia/train
         name: null
         fill_type: random
         crop_type: full
@@ -117,8 +117,8 @@ dataset:
                                 - 255
                             mask_value: 0
     val:
-        - _target_: data.r3dDataset
-          root_dir: /home/artermiloff/Datasets/FloorPlansRussia/FPR_433_v2/val_standard
+        - _target_: data.FloorPlanDataset
+          root_dir: data/FloorPlansRussia/val_standard
           name: standard
           remap_boundary: ${dataset.remap_boundary}
           remap_room: ${dataset.remap_room}
@@ -133,8 +133,8 @@ dataset:
                     height: 512
                     width: 512
                     interpolation: 0
-        - _target_: data.r3dDataset
-          root_dir: /home/artermiloff/Datasets/FloorPlansRussia/FPR_433_v2/val_rare
+        - _target_: data.FloorPlanDataset
+          root_dir: data/FloorPlansRussia/val_rare
           name: rare
           remap_boundary: ${dataset.remap_boundary}
           remap_room: ${dataset.remap_room}
