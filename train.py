@@ -138,9 +138,12 @@ def remap_color_sum_to_combined(arr, d):
 
 @hydra.main(version_base=None, config_path="configs", config_name="default")
 def main(cfg: DictConfig) -> None:
+    project_root_dir = os.getcwd()
+    os.makedirs(os.path.join(project_root_dir, "models/"), exist_ok=True)
+    os.system("dvc pull --remote drive")
     run_dir = hydra.core.hydra_config.HydraConfig.get()["run"]["dir"]
     ckpt_dir = os.path.join(run_dir, "checkpoints")
-    os.mkdir(ckpt_dir)
+    os.makedirs(ckpt_dir)
     writer = SummaryWriter(log_dir=run_dir + "/logs/", flush_secs=3)
 
     logging.basicConfig(
@@ -527,7 +530,17 @@ def main(cfg: DictConfig) -> None:
                 model.state_dict(),
                 ckpt_dir + f"/model_epoch{epoch:03}_loss{val_loss:.0f}.pt",
             )
+        if epoch + 1 == cfg.general.epochs:
+            final_model_dir = os.path.join(
+                project_root_dir, "models/", run_dir[run_dir.find("/") + 1 :]
+            )
+            final_model_path = os.path.join(final_model_dir, "final.pt")
+            os.makedirs(final_model_dir)
+            torch.save(model.state_dict(), final_model_path)
+            os.system(f"dvc add {final_model_path}")
+            os.system("dvc push")
         gc.collect()
+
     logging.info("Finish training")
 
 

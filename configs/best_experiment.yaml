@@ -1,9 +1,12 @@
 hydra:
+    callbacks:
+        git_infos:
+            _target_: hydra_callbacks.GitInfo
     run:
         dir: experiment_logs/${general.name}/train_${now:%Y%m%d_%H%M%S}
 
 general:
-    name: BEST_EXPERIMENT
+    name: BEST_EXP
     device: cuda
     seed: 10
     epochs: 100

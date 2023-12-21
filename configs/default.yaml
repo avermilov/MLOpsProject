@@ -1,4 +1,7 @@
 hydra:
+    callbacks:
+        git_infos:
+            _target_: hydra_callbacks.GitInfo
     run:
         dir: experiment_logs/${general.name}/train_${now:%Y%m%d_%H%M%S}
 
@@ -6,7 +9,7 @@ general:
     name: DEFAULT
     device: cpu
     seed: 10
-    epochs: 5
+    epochs: 1
     num_workers: 6
     boundary_channels: 5
     room_channels: 7
