@@ -11,7 +11,43 @@ import torchvision
 from PIL import Image
 from torch.utils.data import Dataset
 
-from validate_labeling import boundary_type_to_mask, room_type_to_mask
+boundary_type_to_mask = {
+    "background": 0,
+    "wall": 1,
+    "window": 2,
+    "door": 3,
+    "utility": 4,
+    "openingtohall": 5,
+    "openingtoroom": 6,
+}
+room_type_to_mask = {
+    "background": 0,
+    "closet": 1,
+    "bathroom": 2,
+    "hall": 3,
+    "balcony": 4,
+    "room": 5,
+    "utility": 6,
+    "openingtohall": 7,
+    "openingtoroom": 8,
+}
+type_to_mask = {
+    "defaultwall": 0,
+    "openingtohall": 1,
+    "openingtoroom": 2,
+    "closet": 3,
+    "bathroom": 4,
+    "hall": 5,
+    "balcony": 6,
+    "window": 7,
+    "background": 8,
+    "room": 9,
+    "wall": 10,
+    "opening": 11,
+    "door": 12,
+    "utility": 13,
+}
+mask_to_type = {v: k for k, v in type_to_mask.items()}
 
 
 def dynamic_crop(image, boundary, room):
