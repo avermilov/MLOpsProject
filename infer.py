@@ -10,7 +10,7 @@ import tqdm
 from torch.utils.data import DataLoader
 from torchmetrics.classification import MulticlassAccuracy
 
-from data import FloorPlanDataset
+from dataset import FloorPlanDataset
 from net import DFPmodel
 
 PREDICTIONS_DIR = Path("predictions")
@@ -112,7 +112,7 @@ def inference(args):
     csv_path = dst_path / file_name
     predictions_df.to_csv(csv_path, index=False)
     os.system(f"dvc add {csv_path}")
-    os.system("dvc push")
+    os.system(f"dvc push {csv_path}")
     logging.info("Finished inference")
 
 

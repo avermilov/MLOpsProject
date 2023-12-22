@@ -539,7 +539,7 @@ def main(cfg: DictConfig) -> None:
             os.makedirs(final_model_dir)
             torch.save(model.state_dict(), final_model_path)
             os.system(f"dvc add {final_model_path}")
-            os.system("dvc push")
+            os.system(f"dvc push {final_model_path}")
         gc.collect()
 
     logging.info("Finish training")
