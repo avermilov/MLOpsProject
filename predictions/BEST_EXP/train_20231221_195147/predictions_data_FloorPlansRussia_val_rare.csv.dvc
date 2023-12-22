@@ -1,0 +1,5 @@
+outs:
+- md5: 5eb5fc620e319217149ec6be2260815e
+  size: 1188
+  hash: md5
+  path: predictions_data_FloorPlansRussia_val_rare.csv

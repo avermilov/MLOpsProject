@@ -3,29 +3,57 @@ import logging
 import os
 from pathlib import Path
 
-import cv2
-import numpy as np
+import albumentations as alb
+import pandas as pd
 import torch
-import torchvision.transforms
 import tqdm
-from PIL import Image
+from torch.utils.data import DataLoader
+from torchmetrics.classification import MulticlassAccuracy
 
-from data import FillShape, localize
+from data import FloorPlanDataset
 from net import DFPmodel
-from postprocess import clean_room, fill_holes
-from util import bchw2colormap, boundary2rgb, room2rgb
+
+PREDICTIONS_DIR = Path("predictions")
+MODELS_DIR = Path("models")
 
 
 def inference(args):
+    logging.getLogger("PIL").setLevel(logging.WARNING)  # due to bug in PIL
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s - %(module)s - %(levelname)s"
         + "- %(funcName)s: %(lineno)d - %(message)s",
     )
+    os.system("dvc pull --remote drive")
 
-    if not os.path.isdir(args.dst_dir):
-        logging.info(f"Creating dst_dir: {args.dst_dir}")
-        os.makedirs(args.dst_dir)
+    remap_room = {
+        "closet": 5,
+        "bathroom": 2,
+        "hall": 1,
+        "balcony": 4,
+        "room": 6,
+        "utility": 3,
+        "openingtohall": 0,
+        "openingtoroom": 0,
+    }
+    remap_boundary = {
+        "utility": 0,
+        "openingtohall": 4,
+        "openingtoroom": 4,
+    }
+    tfms = alb.Compose([alb.Resize(512, 512, 0)])
+    floorplan_ds = FloorPlanDataset(
+        root_dir=args.src_dir,
+        num_boundary=args.boundary_channels,
+        num_room=args.room_channels,
+        remap_room=remap_room,
+        remap_boundary=remap_boundary,
+        name="inference",
+        transform=tfms,
+        fill_type="center",
+        crop_type="full",
+    )
+    floorplan_dl = DataLoader(floorplan_ds, batch_size=1, shuffle=False)
 
     device = args.device
     logging.info(f"Using device: {device}")
@@ -33,7 +61,9 @@ def inference(args):
     model = DFPmodel(
         room_channels=args.room_channels, boundary_channels=args.boundary_channels
     )
-    model.load_state_dict(torch.load(args.weights_path))
+    model.load_state_dict(
+        torch.load(MODELS_DIR / args.weights_path, map_location=args.device)
+    )
     model.to(device)
     model.eval()
     logging.info(
@@ -41,70 +71,59 @@ def inference(args):
         + f" boundary_channels = {args.boundary_channels}."
     )
 
-    src_dir = Path(args.src_dir)
-    dst_dir = Path(args.dst_dir)
-    src_images = []
-    for ext in ["png", "jpg", "jpeg", "webp"]:
-        src_images.extend(list(src_dir.glob("*." + ext)))
-    logging.info(f"Found {len(src_images)} images in src_dir: {src_dir}")
-
-    logging.info(f"Begin inference with dst_dir: {args.dst_dir}")
-    logging.info(f"Use postprocessing: {args.postprocess}")
-    fill_shape_tsfm = FillShape(type="center")
-    to_tensor = torchvision.transforms.ToTensor()
+    logging.info(f"Found {len(floorplan_ds)} images in src_dir: {args.src_dir}")
+    predictions_list = []
+    PixelAccRoom = MulticlassAccuracy(
+        num_classes=args.room_channels, average="micro"
+    ).to(device)
+    PixelAccCW = MulticlassAccuracy(
+        num_classes=args.boundary_channels, average="micro"
+    ).to(device)
+    ClassAccRoom = MulticlassAccuracy(
+        num_classes=args.room_channels, average="macro"
+    ).to(device)
+    ClassAccCW = MulticlassAccuracy(
+        num_classes=args.boundary_channels, average="macro"
+    ).to(device)
     with torch.inference_mode():
-        for i, file in tqdm.tqdm(enumerate(src_images), total=len(src_images)):
-            image = np.asarray(Image.open(file))
-            h, w, c = image.shape
-            tmp_bd, tmp_room = np.zeros((h, w)), np.zeros((h, w))
+        for im, cw, r in tqdm.tqdm(floorplan_dl):
+            im, cw, r = im.to(device), cw.to(device), r.to(device)
 
-            image, _, _ = localize(image, tmp_bd, tmp_room)
-            image, _, _ = fill_shape_tsfm(image, tmp_bd, tmp_room)
-            image = cv2.resize(image, (512, 512), interpolation=cv2.INTER_NEAREST)
-            image = to_tensor(image.astype(np.float32) / 255.0).unsqueeze(0)
-            image = image.to(device)
+            logits_r, logits_cw = model(im)
 
-            logits_r, logits_cw = model(image)
-            predboundary = bchw2colormap(logits_cw)
-            predroom = bchw2colormap(logits_r)
-            predroom_post = clean_room(predroom, predboundary)
+            pixel_acc_room = PixelAccRoom(logits_r, r.argmax(dim=1)).item()
+            pixel_acc_cw = PixelAccCW(logits_cw, cw.argmax(dim=1)).item()
+            class_acc_room = ClassAccRoom(logits_r, r.argmax(dim=1)).item()
+            class_acc_cw = ClassAccCW(logits_cw, cw.argmax(dim=1)).item()
 
-            rgb_room_raw = room2rgb(predroom)
-            rgb_room_post = room2rgb(predroom_post)
-            rgb_boundary = boundary2rgb(predboundary)
+            predictions_list.append(
+                {
+                    "pixel_acc_room": pixel_acc_room,
+                    "pixel_acc_cw": pixel_acc_cw,
+                    "class_acc_room": class_acc_room,
+                    "class_acc_cw": class_acc_cw,
+                }
+            )
 
-            rgb_full = rgb_boundary.copy()
-            rgb_full[rgb_boundary.sum(axis=2) == 0] = rgb_room_raw[
-                rgb_boundary.sum(axis=2) == 0
-            ]
-            if not args.postprocess:
-                pred_image = Image.fromarray(rgb_full.astype(np.uint8))
-                pred_image.save(dst_dir / f"{file.stem}.png")
-                continue
-
-            rgb_full_post = rgb_boundary.copy()
-            rgb_full_post[rgb_boundary.sum(axis=2) == 0] = rgb_room_post[
-                rgb_boundary.sum(axis=2) == 0
-            ]
-            rgb_full_post[rgb_full_post.sum(axis=2) == 0] = rgb_room_raw[
-                rgb_full_post.sum(axis=2) == 0
-            ]
-            rgb_full_post = fill_holes(rgb_full_post)
-
-            pred_image = Image.fromarray(rgb_full_post.astype(np.uint8))
-            pred_image.save(dst_dir / f"{file.stem}.png")
-        logging.info("Finished inference")
+    predictions_df = pd.DataFrame(predictions_list)
+    dst_path = PREDICTIONS_DIR / Path(args.weights_path).parent
+    os.makedirs(dst_path, exist_ok=True)
+    file_name = "predictions_" + args.src_dir.replace("/", "_") + ".csv"
+    csv_path = dst_path / file_name
+    predictions_df.to_csv(csv_path, index=False)
+    os.system(f"dvc add {csv_path}")
+    os.system("dvc push")
+    logging.info("Finished inference")
 
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--weights_path", type=str, required=True)
-    p.add_argument("--room_channels", type=int, required=True)
-    p.add_argument("--boundary_channels", type=int, required=True)
-    p.add_argument("--src_dir", type=str, required=True)
-    p.add_argument("--dst_dir", type=str, required=True)
-    p.add_argument("--postprocess", action="store_true", default=False)
+    p.add_argument(
+        "--weights_path", type=str, default="BEST_EXP/train_20231221_195147/final.pt"
+    )
+    p.add_argument("--room_channels", type=int, default=7)
+    p.add_argument("--boundary_channels", type=int, default=5)
+    p.add_argument("--src_dir", type=str, default="data/FloorPlansRussia/val_rare")
     p.add_argument("--device", type=str, default="cpu")
     args = p.parse_args()
-
     inference(args)
