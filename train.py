@@ -152,6 +152,7 @@ def main(cfg: DictConfig) -> None:
         + " - %(funcName)s: %(lineno)d - %(message)s",
     )
 
+    logging.info(f"Experiment: {cfg.general.name}")
     DEVICE = cfg.general.device
     logging.info(f"Using device: {DEVICE}")
 
