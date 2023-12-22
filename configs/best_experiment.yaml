@@ -57,7 +57,7 @@ dataset:
         openingtoroom: 0
     split_seed: 3
     train:
-        _target_: data.FloorPlanDataset
+        _target_: dataset.FloorPlanDataset
         root_dir: data/FloorPlansRussia/train
         name: null
         fill_type: random
@@ -120,7 +120,7 @@ dataset:
                                 - 255
                             mask_value: 0
     val:
-        - _target_: data.FloorPlanDataset
+        - _target_: dataset.FloorPlanDataset
           root_dir: data/FloorPlansRussia/val_standard
           name: standard
           remap_boundary: ${dataset.remap_boundary}
@@ -136,7 +136,7 @@ dataset:
                     height: 512
                     width: 512
                     interpolation: 0
-        - _target_: data.FloorPlanDataset
+        - _target_: dataset.FloorPlanDataset
           root_dir: data/FloorPlansRussia/val_rare
           name: rare
           remap_boundary: ${dataset.remap_boundary}
